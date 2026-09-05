@@ -4,7 +4,7 @@ package kraal.v1;
 
 option go_package = "github.com/radicelle/kraal/pkg/protocol/v1;protocolv1";
 
-// ConnectorService defines the invariant contract for all Kraal connectors.
+// ConnectorService defines the invariant contract for all Kraal lineage & metadata connectors.
 service ConnectorService {
   // Spec returns connector metadata and required configuration schema.
   rpc Spec(SpecRequest) returns (SpecResponse);
@@ -12,13 +12,13 @@ service ConnectorService {
   // Check verifies connectivity to the external target with provided configuration.
   rpc Check(CheckRequest) returns (CheckResponse);
 
-  // Discover inspects the external target and returns available streams and schemas.
+  // Discover inspects the external target and returns schemas, entities, and lineage relationships.
   rpc Discover(DiscoverRequest) returns (DiscoverResponse);
 
-  // Read extracts records from the external target and streams them to the caller.
+  // Read extracts metadata and lineage records and streams them to the caller.
   rpc Read(ReadRequest) returns (stream RecordEnvelope);
 
-  // Write ingests records into the external target when operating as a sink.
+  // Write ingests metadata/lineage tags into the target when operating as a sink.
   rpc Write(stream RecordEnvelope) returns (WriteResponse);
 }
 
@@ -50,15 +50,41 @@ message DiscoverRequest {
   string config_json = 1;
 }
 
+// RelationEdge models a directional dependency/lineage edge between entities or fields.
+// e.g. Foreign Keys in databases, or Associations in HubSpot CRM (Deal -> Contact).
+message RelationEdge {
+  string source_entity = 1; // e.g. "public.orders" or "deals"
+  string source_field = 2;  // e.g. "customer_id" or "associated_contact_id"
+  string target_entity = 3; // e.g. "public.customers" or "contacts"
+  string target_field = 4;  // e.g. "id" or "hs_object_id"
+  string relation_type = 5; // e.g. "FOREIGN_KEY", "ASSOCIATION", "VIEW_DEPENDENCY"
+  string description = 6;
+}
+
+// FieldMetadata represents structured attribute/column metadata of an entity.
+message FieldMetadata {
+  string name = 1;
+  string data_type = 2;
+  string native_type = 3;
+  bool is_primary_key = 4;
+  bool is_nullable = 5;
+  string description = 6;
+}
+
 message StreamSchema {
-  string name = 1;                          // Table or stream name (e.g. "users")
-  repeated string primary_keys = 2;         // Primary key field names
-  string json_schema = 3;                   // Column definitions & JSON types
-  repeated string supported_sync_modes = 4; // e.g. ["FULL_REFRESH", "INCREMENTAL"]
+  string name = 1;                          // Entity/table/object name (e.g. "public.users", "contacts")
+  repeated string primary_keys = 2;         // Primary key or unique identifier field names
+  string json_schema = 3;                   // JSON Schema representation of the entity
+  repeated string supported_sync_modes = 4; // e.g. ["METADATA", "LINEAGE"]
+  repeated FieldMetadata fields = 5;        // Structured field/column definitions
+  repeated RelationEdge relations = 6;      // Outgoing lineage edges from this entity
+  string entity_type = 7;                   // e.g. "TABLE", "VIEW", "CRM_OBJECT", "CUSTOM_OBJECT"
+  string description = 8;
 }
 
 message DiscoverResponse {
   repeated StreamSchema streams = 1;
+  repeated RelationEdge relations = 2;      // Cross-entity lineage relationships
 }
 
 message ReadRequest {
@@ -72,9 +98,10 @@ message ReadRequest {
 message RecordEnvelope {
   string stream = 1;
   int64 sequence_number = 2;
-  string emitted_at = 3; // RFC3339 timestamp
-  bytes data_json = 4;   // Record payload encoded as JSON
-  string cursor = 5;     // Cursor value for state tracking
+  string emitted_at = 3;    // RFC3339 timestamp
+  bytes data_json = 4;      // Metadata payload encoded as JSON
+  string cursor = 5;        // Cursor value for state tracking
+  string record_type = 6;   // "ENTITY", "RELATION", "METADATA"
 }
 
 message WriteResponse {

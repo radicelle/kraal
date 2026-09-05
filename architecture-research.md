@@ -3,7 +3,8 @@
 ## 1. Executive Summary & Problem Framing
 
 ### Core Requirements
-* **Diverse Connectors:** Many heterogeneous connectors (REST, GraphQL, SQL, message queues, proprietary protocols, event streams).
+* **Lineage & Metadata-First Scope:** Rather than performing high-volume bulk row ETL, connectors are dedicated to extracting **metadata, entity schemas, and cross-object lineage graphs** (e.g. database tables, views, columns, foreign keys, CRM objects, custom schemas, and object association graphs).
+* **Diverse Connectors:** Many heterogeneous sources (PostgreSQL, MySQL, Snowflake, HubSpot CRM, Salesforce, Kafka).
 * **Dual Deployment Target:**
   * **Desktop Mode:** Lightweight, single-process or local IPC, low resource overhead, zero complex orchestration, offline-capable.
   * **Cloud Mode:** Modular, single container per connector, independent autoscaling, isolated failure domains.

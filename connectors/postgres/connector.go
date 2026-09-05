@@ -43,20 +43,20 @@ func (c *Connector) Spec(ctx context.Context) (*protocolv1.SpecResponse, error) 
 				"type": "array", 
 				"items": { "type": "string" }, 
 				"default": ["public"],
-				"description": "Schemas to discover and read from"
+				"description": "Schemas to discover and read metadata from"
 			},
 			"table_filter": {
 				"type": "array",
 				"items": { "type": "string" },
-				"description": "Optional list of tables to restrict discovery/read to"
+				"description": "Optional list of tables to restrict discovery to"
 			}
 		}
 	}`
 
 	return &protocolv1.SpecResponse{
 		Name:             "postgres",
-		Version:          "1.0.0",
-		Description:      "PostgreSQL source and sink connector supporting full refresh and incremental cursor replication",
+		Version:          "1.1.0",
+		Description:      "PostgreSQL lineage & metadata connector extracting tables, views, columns, and foreign key lineage graph",
 		ConfigSchemaJson: schema,
 	}, nil
 }
@@ -108,11 +108,11 @@ func (c *Connector) Discover(ctx context.Context, configJSON string) (*protocolv
 	}
 	defer conn.Close(context.Background())
 
-	// Query tables across target schemas
+	// Query tables and views across target schemas
 	tableQuery := `
-		SELECT table_schema, table_name 
+		SELECT table_schema, table_name, table_type 
 		FROM information_schema.tables 
-		WHERE table_type = 'BASE TABLE' 
+		WHERE table_type IN ('BASE TABLE', 'VIEW') 
 		  AND table_schema = ANY($1)
 		ORDER BY table_schema, table_name;
 	`
@@ -123,49 +123,101 @@ func (c *Connector) Discover(ctx context.Context, configJSON string) (*protocolv
 	defer rows.Close()
 
 	type tableRef struct {
-		schema string
-		table  string
+		schema    string
+		table     string
+		tableType string
 	}
 	var tables []tableRef
 	for rows.Next() {
 		var t tableRef
-		if err := rows.Scan(&t.schema, &t.table); err != nil {
+		if err := rows.Scan(&t.schema, &t.table, &t.tableType); err != nil {
 			return nil, err
 		}
 		tables = append(tables, t)
+	}
+
+	// Query all Foreign Key relations across target schemas
+	fkQuery := `
+		SELECT
+			tc.table_schema AS src_schema,
+			tc.table_name AS src_table,
+			kcu.column_name AS src_column,
+			ccu.table_schema AS tgt_schema,
+			ccu.table_name AS tgt_table,
+			ccu.column_name AS tgt_column,
+			tc.constraint_name
+		FROM information_schema.table_constraints tc
+		JOIN information_schema.key_column_usage kcu
+		  ON tc.constraint_name = kcu.constraint_name
+		  AND tc.table_schema = kcu.table_schema
+		JOIN information_schema.constraint_column_usage ccu
+		  ON ccu.constraint_name = tc.constraint_name
+		  AND ccu.table_schema = tc.table_schema
+		WHERE tc.constraint_type = 'FOREIGN KEY'
+		  AND tc.table_schema = ANY($1)
+		ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position;
+	`
+	var globalRelations []*protocolv1.RelationEdge
+	tableRelationsMap := make(map[string][]*protocolv1.RelationEdge)
+
+	fkRows, err := conn.Query(ctx, fkQuery, cfg.Schemas)
+	if err == nil {
+		for fkRows.Next() {
+			var srcSchema, srcTable, srcCol, tgtSchema, tgtTable, tgtCol, constraintName string
+			if err := fkRows.Scan(&srcSchema, &srcTable, &srcCol, &tgtSchema, &tgtTable, &tgtCol, &constraintName); err == nil {
+				srcEntity := fmt.Sprintf("%s.%s", srcSchema, srcTable)
+				tgtEntity := fmt.Sprintf("%s.%s", tgtSchema, tgtTable)
+				edge := &protocolv1.RelationEdge{
+					SourceEntity: srcEntity,
+					SourceField:  srcCol,
+					TargetEntity: tgtEntity,
+					TargetField:  tgtCol,
+					RelationType: "FOREIGN_KEY",
+					Description:  fmt.Sprintf("Foreign key %s linking %s.%s to %s.%s", constraintName, srcEntity, srcCol, tgtEntity, tgtCol),
+				}
+				globalRelations = append(globalRelations, edge)
+				tableRelationsMap[srcEntity] = append(tableRelationsMap[srcEntity], edge)
+			}
+		}
+		fkRows.Close()
+	}
+
+	// Query View dependencies for lineage
+	viewQuery := `
+		SELECT 
+			view_schema, 
+			view_name, 
+			table_schema, 
+			table_name 
+		FROM information_schema.view_table_usage
+		WHERE view_schema = ANY($1);
+	`
+	viewRows, err := conn.Query(ctx, viewQuery, cfg.Schemas)
+	if err == nil {
+		for viewRows.Next() {
+			var vSchema, vName, tSchema, tName string
+			if err := viewRows.Scan(&vSchema, &vName, &tSchema, &tName); err == nil {
+				vEntity := fmt.Sprintf("%s.%s", vSchema, vName)
+				tEntity := fmt.Sprintf("%s.%s", tSchema, tName)
+				edge := &protocolv1.RelationEdge{
+					SourceEntity: vEntity,
+					SourceField:  "*",
+					TargetEntity: tEntity,
+					TargetField:  "*",
+					RelationType: "VIEW_DEPENDENCY",
+					Description:  fmt.Sprintf("View %s derives data from %s", vEntity, tEntity),
+				}
+				globalRelations = append(globalRelations, edge)
+				tableRelationsMap[vEntity] = append(tableRelationsMap[vEntity], edge)
+			}
+		}
+		viewRows.Close()
 	}
 
 	var discoveredStreams []*protocolv1.StreamSchema
 
 	for _, t := range tables {
 		streamName := fmt.Sprintf("%s.%s", t.schema, t.table)
-
-		// Discover columns
-		colQuery := `
-			SELECT column_name, data_type, is_nullable
-			FROM information_schema.columns
-			WHERE table_schema = $1 AND table_name = $2
-			ORDER BY ordinal_position;
-		`
-		colRows, err := conn.Query(ctx, colQuery, t.schema, t.table)
-		if err != nil {
-			return nil, fmt.Errorf("failed to discover columns for %s: %w", streamName, err)
-		}
-
-		properties := make(map[string]map[string]any)
-		for colRows.Next() {
-			var colName, dataType, isNullable string
-			if err := colRows.Scan(&colName, &dataType, &isNullable); err != nil {
-				colRows.Close()
-				return nil, err
-			}
-			properties[colName] = map[string]any{
-				"type":        pgTypeToJSONType(dataType),
-				"pg_type":     dataType,
-				"is_nullable": isNullable == "YES",
-			}
-		}
-		colRows.Close()
 
 		// Discover Primary Keys
 		pkQuery := `
@@ -179,124 +231,150 @@ func (c *Connector) Discover(ctx context.Context, configJSON string) (*protocolv
 			ORDER BY kcu.ordinal_position;
 		`
 		pkRows, err := conn.Query(ctx, pkQuery, t.schema, t.table)
-		if err != nil {
-			return nil, fmt.Errorf("failed to discover primary keys for %s: %w", streamName, err)
-		}
+		pkSet := make(map[string]bool)
 		var primaryKeys []string
-		for pkRows.Next() {
-			var pk string
-			if err := pkRows.Scan(&pk); err == nil {
-				primaryKeys = append(primaryKeys, pk)
+		if err == nil {
+			for pkRows.Next() {
+				var pk string
+				if err := pkRows.Scan(&pk); err == nil {
+					primaryKeys = append(primaryKeys, pk)
+					pkSet[pk] = true
+				}
 			}
+			pkRows.Close()
 		}
-		pkRows.Close()
+
+		// Discover columns and attributes
+		colQuery := `
+			SELECT column_name, data_type, is_nullable
+			FROM information_schema.columns
+			WHERE table_schema = $1 AND table_name = $2
+			ORDER BY ordinal_position;
+		`
+		colRows, err := conn.Query(ctx, colQuery, t.schema, t.table)
+		if err != nil {
+			return nil, fmt.Errorf("failed to discover columns for %s: %w", streamName, err)
+		}
+
+		properties := make(map[string]map[string]any)
+		var fieldMetas []*protocolv1.FieldMetadata
+
+		for colRows.Next() {
+			var colName, dataType, isNullable string
+			if err := colRows.Scan(&colName, &dataType, &isNullable); err != nil {
+				colRows.Close()
+				return nil, err
+			}
+			jsonType := pgTypeToJSONType(dataType)
+			isNullableBool := isNullable == "YES"
+			isPK := pkSet[colName]
+
+			properties[colName] = map[string]any{
+				"type":        jsonType,
+				"pg_type":     dataType,
+				"is_nullable": isNullableBool,
+				"primary_key": isPK,
+			}
+
+			fieldMetas = append(fieldMetas, &protocolv1.FieldMetadata{
+				Name:         colName,
+				DataType:     jsonType,
+				NativeType:   dataType,
+				IsPrimaryKey: isPK,
+				IsNullable:   isNullableBool,
+			})
+		}
+		colRows.Close()
 
 		schemaBytes, _ := json.Marshal(map[string]any{
 			"type":       "object",
 			"properties": properties,
 		})
 
+		entityKind := "TABLE"
+		if t.tableType == "VIEW" {
+			entityKind = "VIEW"
+		}
+
 		discoveredStreams = append(discoveredStreams, &protocolv1.StreamSchema{
 			Name:               streamName,
 			PrimaryKeys:        primaryKeys,
 			JsonSchema:         string(schemaBytes),
-			SupportedSyncModes: []string{"FULL_REFRESH", "INCREMENTAL"},
+			SupportedSyncModes: []string{"METADATA", "LINEAGE"},
+			Fields:             fieldMetas,
+			Relations:          tableRelationsMap[streamName],
+			EntityType:         entityKind,
 		})
 	}
 
 	return &protocolv1.DiscoverResponse{
-		Streams: discoveredStreams,
+		Streams:   discoveredStreams,
+		Relations: globalRelations,
 	}, nil
 }
 
 func (c *Connector) Read(ctx context.Context, req *protocolv1.ReadRequest, emit func(record *protocolv1.RecordEnvelope) error) error {
-	cfg, err := ParseConfig(req.GetConfigJson())
+	// Discover all metadata and lineage
+	discoverResp, err := c.Discover(ctx, req.GetConfigJson())
 	if err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
+		return fmt.Errorf("lineage discovery failed during read: %w", err)
 	}
 
-	conn, err := pgx.Connect(ctx, cfg.ConnectionString())
-	if err != nil {
-		return fmt.Errorf("connection error: %w", err)
-	}
-	defer conn.Close(context.Background())
-
-	// Stream name can be "schema.table" or just "table"
-	streamName := req.GetStreamName()
-	parts := strings.Split(streamName, ".")
-	var schemaName, tableName string
-	if len(parts) == 2 {
-		schemaName = parts[0]
-		tableName = parts[1]
-	} else {
-		schemaName = "public"
-		tableName = parts[0]
-	}
-
-	// Safe identifier quoting to prevent injection
-	sanitizedTable := fmt.Sprintf("%s.%s", pgx.Identifier{schemaName}.Sanitize(), pgx.Identifier{tableName}.Sanitize())
-
-	queryBuilder := fmt.Sprintf("SELECT * FROM %s", sanitizedTable)
-	var args []any
-
-	if req.GetCursorField() != "" && req.GetCursorValue() != "" {
-		cursorCol := pgx.Identifier{req.GetCursorField()}.Sanitize()
-		queryBuilder += fmt.Sprintf(" WHERE %s > $1 ORDER BY %s ASC", cursorCol, cursorCol)
-		args = append(args, req.GetCursorValue())
-	}
-
-	if req.GetLimit() > 0 {
-		queryBuilder += fmt.Sprintf(" LIMIT %d", req.GetLimit())
-	}
-
-	rows, err := conn.Query(ctx, queryBuilder, args...)
-	if err != nil {
-		return fmt.Errorf("failed executing read query (%s): %w", queryBuilder, err)
-	}
-	defer rows.Close()
-
-	fields := rows.FieldDescriptions()
 	var seq int64
+	streamFilter := req.GetStreamName()
 
-	for rows.Next() {
+	// 1. Emit entity metadata
+	for _, stream := range discoverResp.GetStreams() {
+		if streamFilter != "" && streamFilter != "lineage" && streamFilter != "metadata" && streamFilter != stream.GetName() {
+			continue
+		}
 		seq++
-		values, err := rows.Values()
+		dataBytes, err := json.Marshal(map[string]any{
+			"entity":       stream.GetName(),
+			"type":         stream.GetEntityType(),
+			"primary_keys": stream.GetPrimaryKeys(),
+			"fields":       stream.GetFields(),
+			"relations":    stream.GetRelations(),
+		})
 		if err != nil {
-			return fmt.Errorf("failed to scan row: %w", err)
-		}
-
-		recordMap := make(map[string]any, len(fields))
-		var latestCursor string
-
-		for i, fd := range fields {
-			colName := string(fd.Name)
-			val := values[i]
-			recordMap[colName] = val
-
-			if req.GetCursorField() != "" && strings.EqualFold(colName, req.GetCursorField()) {
-				latestCursor = fmt.Sprintf("%v", val)
-			}
-		}
-
-		payloadBytes, err := json.Marshal(recordMap)
-		if err != nil {
-			return fmt.Errorf("failed marshaling row to JSON: %w", err)
+			return err
 		}
 
 		envelope := &protocolv1.RecordEnvelope{
-			Stream:         streamName,
+			Stream:         stream.GetName(),
 			SequenceNumber: seq,
 			EmittedAt:      time.Now().UTC().Format(time.RFC3339Nano),
-			DataJson:       payloadBytes,
-			Cursor:         latestCursor,
+			DataJson:       dataBytes,
+			RecordType:     "ENTITY",
 		}
-
 		if err := emit(envelope); err != nil {
-			return fmt.Errorf("failed emitting record: %w", err)
+			return err
 		}
 	}
 
-	return rows.Err()
+	// 2. Emit global lineage relationship edges
+	if streamFilter == "" || streamFilter == "lineage" {
+		for _, rel := range discoverResp.GetRelations() {
+			seq++
+			relBytes, err := json.Marshal(rel)
+			if err != nil {
+				return err
+			}
+
+			envelope := &protocolv1.RecordEnvelope{
+				Stream:         "lineage.relations",
+				SequenceNumber: seq,
+				EmittedAt:      time.Now().UTC().Format(time.RFC3339Nano),
+				DataJson:       relBytes,
+				RecordType:     "RELATION",
+			}
+			if err := emit(envelope); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (c *Connector) Write(ctx context.Context, records <-chan *protocolv1.RecordEnvelope) (*protocolv1.WriteResponse, error) {

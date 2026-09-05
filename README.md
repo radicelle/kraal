@@ -1,12 +1,13 @@
 # Kraal: Modular Connector Architecture (Go)
 
-A high-performance, modular connector platform based on the **Inverted Out-of-Process (gRPC / Sidecar)** architecture. Kraal enables dozens of heterogeneous data connectors (Postgres, APIs, queues) to run identically in both **Desktop Mode** (local subprocess with zero container overhead) and **Cloud Mode** (independent micro-containers scaling freely), while solving the shared library dependency hell.
+A high-performance, modular connector platform based on the **Inverted Out-of-Process (gRPC / Sidecar)** architecture. Kraal enables dozens of heterogeneous connectors to extract **lineage data and metadata** (database tables, views, foreign keys, CRM objects, custom schemas, and association graphs) while running identically in both **Desktop Mode** (local subprocess with zero container overhead) and **Cloud Mode** (independent micro-containers scaling freely), completely solving the shared library dependency hell.
 
 ---
 
 ## 🏛️ Architecture Highlights
 
 ### The "Smart Host, Thin Connector" Principle
+* **Lineage & Metadata First:** Connectors are scoped to extracting structured metadata, schema attributes, and cross-object lineage graphs rather than heavy bulk row replication.
 * **No Database/ORM Coupling:** Connectors do **not** import the Host's internal database drivers or internal data models.
 * **Invariant SDK Contract:** The shared `pkg/sdk` and `pkg/protocol` packages define only the standard protocol (`Spec`, `Check`, `Discover`, `Read`, `Write`) and record envelopes. Updating host storage engines or adding new connector features never triggers breaking version bumps across 50+ connectors.
 * **Dual Execution Mode:**
@@ -21,18 +22,18 @@ A high-performance, modular connector platform based on the **Inverted Out-of-Pr
 |  Single Desktop App / Host Process     |  Kubernetes / Container Orchestrator     |
 |                                        |                                          |
 |  +----------------------------------+  |  +----------------+  +----------------+  |
-|  | Host Runtime Engine (Ingestion)  |  |  | Postgres       |  | API            |  |
+|  | Host Runtime Engine (Ingestion)  |  |  | Postgres       |  | HubSpot CRM    |  |
 |  +-----------------+----------------+  |  | Connector (Go) |  | Connector (Go) |  |
 |                    | Local Loopback    |  +-------+--------+  +-------+--------+  |
 |  +-----------------+----------------+  |          \                  /            |
 |  | Connector Local Processes        |  |           \   gRPC / TCP   /             |
-|  | (Postgres, API, etc.)            |  |            v              v              |
+|  | (Postgres, HubSpot, etc.)        |  |            v              v              |
 |  +----------------------------------+  |  +------------------------------------+  |
-|                                        |  | Host Ingestion / Storage Service   |  |
+|                                        |  | Host Lineage & Catalog Service     |  |
 |                                        |  +-----------------+------------------+  |
-|                                        |                    | Storage Sink        |
+|                                        |                    | Lineage Graph Sink  |
 |                                        |                    v                     |
-|                                        |            [( Target Store )]            |
+|                                        |            [( Graph / Store )]           |
 +----------------------------------------+------------------------------------------+
 ```
 
@@ -43,23 +44,31 @@ A high-performance, modular connector platform based on the **Inverted Out-of-Pr
 ```text
 ├── proto/
 │   └── kraal/v1/
-│       └── connector.proto      # Invariant gRPC protocol definition
+│       └── connector.proto      # Invariant gRPC protocol definition (Lineage, Relations, Schema)
 ├── pkg/
 │   ├── protocol/v1/             # Generated Protobuf & gRPC Go stubs
 │   └── sdk/                     # Shared connector toolkit: Server, Client, Subprocess Launcher
 ├── connectors/
-│   └── postgres/                # PostgreSQL Source & Sink connector (pure Go pgx)
-│       ├── config.go            # Connection config & validation
-│       ├── connector.go         # Implementation of sdk.Connector
-│       ├── connector_test.go    # Unit tests
-│       └── Dockerfile           # Minimal container build (< 15MB)
+│   ├── postgres/                # PostgreSQL Lineage Connector (tables, views, foreign key graph)
+│   │   ├── config.go
+│   │   ├── connector.go
+│   │   ├── connector_test.go
+│   │   └── Dockerfile
+│   └── hubspot/                 # HubSpot CRM Lineage Connector (objects, properties, associations)
+│       ├── config.go
+│       ├── client.go
+│       ├── connector.go
+│       ├── connector_test.go
+│       └── Dockerfile
 ├── cmd/
 │   ├── connector-postgres/      # Main entrypoint for standalone Postgres connector binary
+│   │   └── main.go
+│   ├── connector-hubspot/       # Main entrypoint for standalone HubSpot connector binary
 │   │   └── main.go
 │   └── kraal-host/              # Host runtime engine (Desktop & Cloud runner)
 │       └── main.go
 ├── architecture-research.md     # Architectural options research document
-├── Dockerfile                   # Standalone connector container image
+├── Dockerfile                   # Default container build
 └── README.md
 ```
 
@@ -71,25 +80,39 @@ A high-performance, modular connector platform based on the **Inverted Out-of-Pr
 
 ```powershell
 go build -o bin/connector-postgres.exe ./cmd/connector-postgres
+go build -o bin/connector-hubspot.exe ./cmd/connector-hubspot
 go build -o bin/kraal-host.exe ./cmd/kraal-host
 ```
 
 ### 2. Desktop Mode (Subprocess Execution)
 
-In Desktop mode, `kraal-host` spawns the connector executable locally on an ephemeral port without any manual network configuration:
+In Desktop mode, `kraal-host` spawns any connector executable locally on an ephemeral port without any manual network configuration:
 
+#### PostgreSQL Connector
 ```powershell
 # Query connector specification
 .\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-postgres.exe -action=spec
 
-# Run connection check against a database
-.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-postgres.exe -action=check -config='{\"host\":\"localhost\",\"port\":5432,\"database\":\"mydb\",\"user\":\"postgres\",\"password\":\"secret\"}'
-
-# Run schema discovery
+# Run schema & foreign key lineage discovery
 .\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-postgres.exe -action=discover -config='{\"host\":\"localhost\",\"port\":5432,\"database\":\"mydb\",\"user\":\"postgres\",\"password\":\"secret\"}'
 
-# Stream records into host data layer
-.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-postgres.exe -action=sync -stream="public.users" -config='{\"host\":\"localhost\",\"port\":5432,\"database\":\"mydb\",\"user\":\"postgres\",\"password\":\"secret\"}'
+# Sync lineage records into host catalog
+.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-postgres.exe -action=sync -stream="lineage" -config='{\"host\":\"localhost\",\"port\":5432,\"database\":\"mydb\",\"user\":\"postgres\",\"password\":\"secret\"}'
+```
+
+#### HubSpot CRM Connector
+```powershell
+# Query connector specification
+.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-hubspot.exe -action=spec
+
+# Check connectivity with HubSpot Private App Token
+.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-hubspot.exe -action=check -config='{\"access_token\":\"pat-na1-xxxx\"}'
+
+# Discover CRM objects, custom schemas, and association graph
+.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-hubspot.exe -action=discover -config='{\"access_token\":\"pat-na1-xxxx\"}'
+
+# Stream CRM lineage records
+.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-hubspot.exe -action=sync -stream="lineage" -config='{\"access_token\":\"pat-na1-xxxx\"}'
 ```
 
 ---
@@ -99,13 +122,13 @@ In Desktop mode, `kraal-host` spawns the connector executable locally on an ephe
 #### Build the Connector Container
 
 ```bash
-docker build -t kraal-connector-postgres:latest .
+docker build -t kraal-connector-hubspot:latest -f connectors/hubspot/Dockerfile .
 ```
 
 #### Run the Container
 
 ```bash
-docker run -d --name pg-connector -p 50051:50051 kraal-connector-postgres:latest
+docker run -d --name hubspot-connector -p 50051:50051 kraal-connector-hubspot:latest
 ```
 
 #### Connect via Host in Cloud Mode

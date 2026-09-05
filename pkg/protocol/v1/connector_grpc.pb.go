@@ -30,17 +30,17 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// ConnectorService defines the invariant contract for all Kraal connectors.
+// ConnectorService defines the invariant contract for all Kraal lineage & metadata connectors.
 type ConnectorServiceClient interface {
 	// Spec returns connector metadata and required configuration schema.
 	Spec(ctx context.Context, in *SpecRequest, opts ...grpc.CallOption) (*SpecResponse, error)
 	// Check verifies connectivity to the external target with provided configuration.
 	Check(ctx context.Context, in *CheckRequest, opts ...grpc.CallOption) (*CheckResponse, error)
-	// Discover inspects the external target and returns available streams and schemas.
+	// Discover inspects the external target and returns schemas, entities, and lineage relationships.
 	Discover(ctx context.Context, in *DiscoverRequest, opts ...grpc.CallOption) (*DiscoverResponse, error)
-	// Read extracts records from the external target and streams them to the caller.
+	// Read extracts metadata and lineage records and streams them to the caller.
 	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RecordEnvelope], error)
-	// Write ingests records into the external target when operating as a sink.
+	// Write ingests metadata/lineage tags into the target when operating as a sink.
 	Write(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RecordEnvelope, WriteResponse], error)
 }
 
@@ -118,17 +118,17 @@ type ConnectorService_WriteClient = grpc.ClientStreamingClient[RecordEnvelope, W
 // All implementations must embed UnimplementedConnectorServiceServer
 // for forward compatibility.
 //
-// ConnectorService defines the invariant contract for all Kraal connectors.
+// ConnectorService defines the invariant contract for all Kraal lineage & metadata connectors.
 type ConnectorServiceServer interface {
 	// Spec returns connector metadata and required configuration schema.
 	Spec(context.Context, *SpecRequest) (*SpecResponse, error)
 	// Check verifies connectivity to the external target with provided configuration.
 	Check(context.Context, *CheckRequest) (*CheckResponse, error)
-	// Discover inspects the external target and returns available streams and schemas.
+	// Discover inspects the external target and returns schemas, entities, and lineage relationships.
 	Discover(context.Context, *DiscoverRequest) (*DiscoverResponse, error)
-	// Read extracts records from the external target and streams them to the caller.
+	// Read extracts metadata and lineage records and streams them to the caller.
 	Read(*ReadRequest, grpc.ServerStreamingServer[RecordEnvelope]) error
-	// Write ingests records into the external target when operating as a sink.
+	// Write ingests metadata/lineage tags into the target when operating as a sink.
 	Write(grpc.ClientStreamingServer[RecordEnvelope, WriteResponse]) error
 	mustEmbedUnimplementedConnectorServiceServer()
 }

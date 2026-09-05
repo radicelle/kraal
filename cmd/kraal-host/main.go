@@ -80,14 +80,35 @@ func main() {
 		if err != nil {
 			log.Fatalf("Discover failed: %v", err)
 		}
-		fmt.Printf("Discovered %d stream(s):\n", len(resp.GetStreams()))
+		fmt.Printf("=== Discovered %d Entity Stream(s) ===\n", len(resp.GetStreams()))
 		for _, s := range resp.GetStreams() {
-			fmt.Printf(" - Stream: %s (PKs: %v, SyncModes: %v)\n", s.GetName(), s.GetPrimaryKeys(), s.GetSupportedSyncModes())
-			fmt.Printf("   Schema: %s\n", s.GetJsonSchema())
+			fmt.Printf("• %s [%s] (PKs: %v, Fields: %d, Outgoing Relations: %d)\n",
+				s.GetName(), s.GetEntityType(), s.GetPrimaryKeys(), len(s.GetFields()), len(s.GetRelations()))
+			for _, f := range s.GetFields() {
+				pkTag := ""
+				if f.GetIsPrimaryKey() {
+					pkTag = " [PK]"
+				}
+				fmt.Printf("    - %s (%s)%s: %s\n", f.GetName(), f.GetDataType(), pkTag, f.GetDescription())
+			}
+			for _, r := range s.GetRelations() {
+				fmt.Printf("    → Relation: %s.%s -> %s.%s (%s)\n",
+					r.GetSourceEntity(), r.GetSourceField(), r.GetTargetEntity(), r.GetTargetField(), r.GetRelationType())
+			}
+		}
+
+		if len(resp.GetRelations()) > 0 {
+			fmt.Printf("\n=== Global Lineage Graph (%d Edges) ===\n", len(resp.GetRelations()))
+			for _, r := range resp.GetRelations() {
+				fmt.Printf("  %s.%s ---> %s.%s [%s]\n    Description: %s\n",
+					r.GetSourceEntity(), r.GetSourceField(),
+					r.GetTargetEntity(), r.GetTargetField(),
+					r.GetRelationType(), r.GetDescription())
+			}
 		}
 
 	case "sync":
-		log.Printf("Starting sync for stream: %s\n", *streamName)
+		log.Printf("Starting lineage & metadata sync (filter='%s')...\n", *streamName)
 		stream, err := svc.Read(ctx, &protocolv1.ReadRequest{
 			ConfigJson:  *configJSON,
 			StreamName:  *streamName,
@@ -109,15 +130,14 @@ func main() {
 				log.Fatalf("Stream error: %v", err)
 			}
 			count++
-			fmt.Printf("[%s #%d @ %s] Cursor=%s Data=%s\n",
+			fmt.Printf("[%s #%d | Type=%s] %s\n",
 				record.GetStream(),
 				record.GetSequenceNumber(),
-				record.GetEmittedAt(),
-				record.GetCursor(),
+				record.GetRecordType(),
 				string(record.GetDataJson()),
 			)
 		}
-		log.Printf("Sync complete. Ingested %d record(s) into Host data layer.\n", count)
+		log.Printf("Sync complete. Ingested %d metadata/lineage record(s) into Host catalog.\n", count)
 
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown action: %s\n", *action)

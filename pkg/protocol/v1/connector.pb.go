@@ -314,19 +314,194 @@ func (x *DiscoverRequest) GetConfigJson() string {
 	return ""
 }
 
+// RelationEdge models a directional dependency/lineage edge between entities or fields.
+// e.g. Foreign Keys in databases, or Associations in HubSpot CRM (Deal -> Contact).
+type RelationEdge struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SourceEntity  string                 `protobuf:"bytes,1,opt,name=source_entity,json=sourceEntity,proto3" json:"source_entity,omitempty"` // e.g. "public.orders" or "deals"
+	SourceField   string                 `protobuf:"bytes,2,opt,name=source_field,json=sourceField,proto3" json:"source_field,omitempty"`    // e.g. "customer_id" or "associated_contact_id"
+	TargetEntity  string                 `protobuf:"bytes,3,opt,name=target_entity,json=targetEntity,proto3" json:"target_entity,omitempty"` // e.g. "public.customers" or "contacts"
+	TargetField   string                 `protobuf:"bytes,4,opt,name=target_field,json=targetField,proto3" json:"target_field,omitempty"`    // e.g. "id" or "hs_object_id"
+	RelationType  string                 `protobuf:"bytes,5,opt,name=relation_type,json=relationType,proto3" json:"relation_type,omitempty"` // e.g. "FOREIGN_KEY", "ASSOCIATION", "VIEW_DEPENDENCY"
+	Description   string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RelationEdge) Reset() {
+	*x = RelationEdge{}
+	mi := &file_connector_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelationEdge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelationEdge) ProtoMessage() {}
+
+func (x *RelationEdge) ProtoReflect() protoreflect.Message {
+	mi := &file_connector_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelationEdge.ProtoReflect.Descriptor instead.
+func (*RelationEdge) Descriptor() ([]byte, []int) {
+	return file_connector_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RelationEdge) GetSourceEntity() string {
+	if x != nil {
+		return x.SourceEntity
+	}
+	return ""
+}
+
+func (x *RelationEdge) GetSourceField() string {
+	if x != nil {
+		return x.SourceField
+	}
+	return ""
+}
+
+func (x *RelationEdge) GetTargetEntity() string {
+	if x != nil {
+		return x.TargetEntity
+	}
+	return ""
+}
+
+func (x *RelationEdge) GetTargetField() string {
+	if x != nil {
+		return x.TargetField
+	}
+	return ""
+}
+
+func (x *RelationEdge) GetRelationType() string {
+	if x != nil {
+		return x.RelationType
+	}
+	return ""
+}
+
+func (x *RelationEdge) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+// FieldMetadata represents structured attribute/column metadata of an entity.
+type FieldMetadata struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	DataType      string                 `protobuf:"bytes,2,opt,name=data_type,json=dataType,proto3" json:"data_type,omitempty"`
+	NativeType    string                 `protobuf:"bytes,3,opt,name=native_type,json=nativeType,proto3" json:"native_type,omitempty"`
+	IsPrimaryKey  bool                   `protobuf:"varint,4,opt,name=is_primary_key,json=isPrimaryKey,proto3" json:"is_primary_key,omitempty"`
+	IsNullable    bool                   `protobuf:"varint,5,opt,name=is_nullable,json=isNullable,proto3" json:"is_nullable,omitempty"`
+	Description   string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FieldMetadata) Reset() {
+	*x = FieldMetadata{}
+	mi := &file_connector_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FieldMetadata) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FieldMetadata) ProtoMessage() {}
+
+func (x *FieldMetadata) ProtoReflect() protoreflect.Message {
+	mi := &file_connector_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FieldMetadata.ProtoReflect.Descriptor instead.
+func (*FieldMetadata) Descriptor() ([]byte, []int) {
+	return file_connector_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *FieldMetadata) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *FieldMetadata) GetDataType() string {
+	if x != nil {
+		return x.DataType
+	}
+	return ""
+}
+
+func (x *FieldMetadata) GetNativeType() string {
+	if x != nil {
+		return x.NativeType
+	}
+	return ""
+}
+
+func (x *FieldMetadata) GetIsPrimaryKey() bool {
+	if x != nil {
+		return x.IsPrimaryKey
+	}
+	return false
+}
+
+func (x *FieldMetadata) GetIsNullable() bool {
+	if x != nil {
+		return x.IsNullable
+	}
+	return false
+}
+
+func (x *FieldMetadata) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
 type StreamSchema struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
-	Name               string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                                                         // Table or stream name (e.g. "users")
-	PrimaryKeys        []string               `protobuf:"bytes,2,rep,name=primary_keys,json=primaryKeys,proto3" json:"primary_keys,omitempty"`                        // Primary key field names
-	JsonSchema         string                 `protobuf:"bytes,3,opt,name=json_schema,json=jsonSchema,proto3" json:"json_schema,omitempty"`                           // Column definitions & JSON types
-	SupportedSyncModes []string               `protobuf:"bytes,4,rep,name=supported_sync_modes,json=supportedSyncModes,proto3" json:"supported_sync_modes,omitempty"` // e.g. ["FULL_REFRESH", "INCREMENTAL"]
+	Name               string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                                                         // Entity/table/object name (e.g. "public.users", "contacts")
+	PrimaryKeys        []string               `protobuf:"bytes,2,rep,name=primary_keys,json=primaryKeys,proto3" json:"primary_keys,omitempty"`                        // Primary key or unique identifier field names
+	JsonSchema         string                 `protobuf:"bytes,3,opt,name=json_schema,json=jsonSchema,proto3" json:"json_schema,omitempty"`                           // JSON Schema representation of the entity
+	SupportedSyncModes []string               `protobuf:"bytes,4,rep,name=supported_sync_modes,json=supportedSyncModes,proto3" json:"supported_sync_modes,omitempty"` // e.g. ["METADATA", "LINEAGE"]
+	Fields             []*FieldMetadata       `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty"`                                                     // Structured field/column definitions
+	Relations          []*RelationEdge        `protobuf:"bytes,6,rep,name=relations,proto3" json:"relations,omitempty"`                                               // Outgoing lineage edges from this entity
+	EntityType         string                 `protobuf:"bytes,7,opt,name=entity_type,json=entityType,proto3" json:"entity_type,omitempty"`                           // e.g. "TABLE", "VIEW", "CRM_OBJECT", "CUSTOM_OBJECT"
+	Description        string                 `protobuf:"bytes,8,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
 
 func (x *StreamSchema) Reset() {
 	*x = StreamSchema{}
-	mi := &file_connector_proto_msgTypes[5]
+	mi := &file_connector_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -338,7 +513,7 @@ func (x *StreamSchema) String() string {
 func (*StreamSchema) ProtoMessage() {}
 
 func (x *StreamSchema) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_proto_msgTypes[5]
+	mi := &file_connector_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -351,7 +526,7 @@ func (x *StreamSchema) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamSchema.ProtoReflect.Descriptor instead.
 func (*StreamSchema) Descriptor() ([]byte, []int) {
-	return file_connector_proto_rawDescGZIP(), []int{5}
+	return file_connector_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *StreamSchema) GetName() string {
@@ -382,16 +557,45 @@ func (x *StreamSchema) GetSupportedSyncModes() []string {
 	return nil
 }
 
+func (x *StreamSchema) GetFields() []*FieldMetadata {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+func (x *StreamSchema) GetRelations() []*RelationEdge {
+	if x != nil {
+		return x.Relations
+	}
+	return nil
+}
+
+func (x *StreamSchema) GetEntityType() string {
+	if x != nil {
+		return x.EntityType
+	}
+	return ""
+}
+
+func (x *StreamSchema) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
 type DiscoverResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Streams       []*StreamSchema        `protobuf:"bytes,1,rep,name=streams,proto3" json:"streams,omitempty"`
+	Relations     []*RelationEdge        `protobuf:"bytes,2,rep,name=relations,proto3" json:"relations,omitempty"` // Cross-entity lineage relationships
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DiscoverResponse) Reset() {
 	*x = DiscoverResponse{}
-	mi := &file_connector_proto_msgTypes[6]
+	mi := &file_connector_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -403,7 +607,7 @@ func (x *DiscoverResponse) String() string {
 func (*DiscoverResponse) ProtoMessage() {}
 
 func (x *DiscoverResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_proto_msgTypes[6]
+	mi := &file_connector_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -416,12 +620,19 @@ func (x *DiscoverResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverResponse.ProtoReflect.Descriptor instead.
 func (*DiscoverResponse) Descriptor() ([]byte, []int) {
-	return file_connector_proto_rawDescGZIP(), []int{6}
+	return file_connector_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DiscoverResponse) GetStreams() []*StreamSchema {
 	if x != nil {
 		return x.Streams
+	}
+	return nil
+}
+
+func (x *DiscoverResponse) GetRelations() []*RelationEdge {
+	if x != nil {
+		return x.Relations
 	}
 	return nil
 }
@@ -439,7 +650,7 @@ type ReadRequest struct {
 
 func (x *ReadRequest) Reset() {
 	*x = ReadRequest{}
-	mi := &file_connector_proto_msgTypes[7]
+	mi := &file_connector_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -451,7 +662,7 @@ func (x *ReadRequest) String() string {
 func (*ReadRequest) ProtoMessage() {}
 
 func (x *ReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_proto_msgTypes[7]
+	mi := &file_connector_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -464,7 +675,7 @@ func (x *ReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadRequest.ProtoReflect.Descriptor instead.
 func (*ReadRequest) Descriptor() ([]byte, []int) {
-	return file_connector_proto_rawDescGZIP(), []int{7}
+	return file_connector_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ReadRequest) GetConfigJson() string {
@@ -506,16 +717,17 @@ type RecordEnvelope struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Stream         string                 `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
 	SequenceNumber int64                  `protobuf:"varint,2,opt,name=sequence_number,json=sequenceNumber,proto3" json:"sequence_number,omitempty"`
-	EmittedAt      string                 `protobuf:"bytes,3,opt,name=emitted_at,json=emittedAt,proto3" json:"emitted_at,omitempty"` // RFC3339 timestamp
-	DataJson       []byte                 `protobuf:"bytes,4,opt,name=data_json,json=dataJson,proto3" json:"data_json,omitempty"`    // Record payload encoded as JSON
-	Cursor         string                 `protobuf:"bytes,5,opt,name=cursor,proto3" json:"cursor,omitempty"`                        // Cursor value for state tracking
+	EmittedAt      string                 `protobuf:"bytes,3,opt,name=emitted_at,json=emittedAt,proto3" json:"emitted_at,omitempty"`    // RFC3339 timestamp
+	DataJson       []byte                 `protobuf:"bytes,4,opt,name=data_json,json=dataJson,proto3" json:"data_json,omitempty"`       // Metadata payload encoded as JSON
+	Cursor         string                 `protobuf:"bytes,5,opt,name=cursor,proto3" json:"cursor,omitempty"`                           // Cursor value for state tracking
+	RecordType     string                 `protobuf:"bytes,6,opt,name=record_type,json=recordType,proto3" json:"record_type,omitempty"` // "ENTITY", "RELATION", "METADATA"
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
 func (x *RecordEnvelope) Reset() {
 	*x = RecordEnvelope{}
-	mi := &file_connector_proto_msgTypes[8]
+	mi := &file_connector_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -527,7 +739,7 @@ func (x *RecordEnvelope) String() string {
 func (*RecordEnvelope) ProtoMessage() {}
 
 func (x *RecordEnvelope) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_proto_msgTypes[8]
+	mi := &file_connector_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -540,7 +752,7 @@ func (x *RecordEnvelope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordEnvelope.ProtoReflect.Descriptor instead.
 func (*RecordEnvelope) Descriptor() ([]byte, []int) {
-	return file_connector_proto_rawDescGZIP(), []int{8}
+	return file_connector_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RecordEnvelope) GetStream() string {
@@ -578,6 +790,13 @@ func (x *RecordEnvelope) GetCursor() string {
 	return ""
 }
 
+func (x *RecordEnvelope) GetRecordType() string {
+	if x != nil {
+		return x.RecordType
+	}
+	return ""
+}
+
 type WriteResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	RecordsWritten int64                  `protobuf:"varint,1,opt,name=records_written,json=recordsWritten,proto3" json:"records_written,omitempty"`
@@ -589,7 +808,7 @@ type WriteResponse struct {
 
 func (x *WriteResponse) Reset() {
 	*x = WriteResponse{}
-	mi := &file_connector_proto_msgTypes[9]
+	mi := &file_connector_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -601,7 +820,7 @@ func (x *WriteResponse) String() string {
 func (*WriteResponse) ProtoMessage() {}
 
 func (x *WriteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_proto_msgTypes[9]
+	mi := &file_connector_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -614,7 +833,7 @@ func (x *WriteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteResponse.ProtoReflect.Descriptor instead.
 func (*WriteResponse) Descriptor() ([]byte, []int) {
-	return file_connector_proto_rawDescGZIP(), []int{9}
+	return file_connector_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *WriteResponse) GetRecordsWritten() int64 {
@@ -657,15 +876,37 @@ const file_connector_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"2\n" +
 	"\x0fDiscoverRequest\x12\x1f\n" +
 	"\vconfig_json\x18\x01 \x01(\tR\n" +
-	"configJson\"\x98\x01\n" +
+	"configJson\"\xe5\x01\n" +
+	"\fRelationEdge\x12#\n" +
+	"\rsource_entity\x18\x01 \x01(\tR\fsourceEntity\x12!\n" +
+	"\fsource_field\x18\x02 \x01(\tR\vsourceField\x12#\n" +
+	"\rtarget_entity\x18\x03 \x01(\tR\ftargetEntity\x12!\n" +
+	"\ftarget_field\x18\x04 \x01(\tR\vtargetField\x12#\n" +
+	"\rrelation_type\x18\x05 \x01(\tR\frelationType\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xca\x01\n" +
+	"\rFieldMetadata\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
+	"\tdata_type\x18\x02 \x01(\tR\bdataType\x12\x1f\n" +
+	"\vnative_type\x18\x03 \x01(\tR\n" +
+	"nativeType\x12$\n" +
+	"\x0eis_primary_key\x18\x04 \x01(\bR\fisPrimaryKey\x12\x1f\n" +
+	"\vis_nullable\x18\x05 \x01(\bR\n" +
+	"isNullable\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xc2\x02\n" +
 	"\fStreamSchema\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fprimary_keys\x18\x02 \x03(\tR\vprimaryKeys\x12\x1f\n" +
 	"\vjson_schema\x18\x03 \x01(\tR\n" +
 	"jsonSchema\x120\n" +
-	"\x14supported_sync_modes\x18\x04 \x03(\tR\x12supportedSyncModes\"D\n" +
+	"\x14supported_sync_modes\x18\x04 \x03(\tR\x12supportedSyncModes\x12/\n" +
+	"\x06fields\x18\x05 \x03(\v2\x17.kraal.v1.FieldMetadataR\x06fields\x124\n" +
+	"\trelations\x18\x06 \x03(\v2\x16.kraal.v1.RelationEdgeR\trelations\x12\x1f\n" +
+	"\ventity_type\x18\a \x01(\tR\n" +
+	"entityType\x12 \n" +
+	"\vdescription\x18\b \x01(\tR\vdescription\"z\n" +
 	"\x10DiscoverResponse\x120\n" +
-	"\astreams\x18\x01 \x03(\v2\x16.kraal.v1.StreamSchemaR\astreams\"\xab\x01\n" +
+	"\astreams\x18\x01 \x03(\v2\x16.kraal.v1.StreamSchemaR\astreams\x124\n" +
+	"\trelations\x18\x02 \x03(\v2\x16.kraal.v1.RelationEdgeR\trelations\"\xab\x01\n" +
 	"\vReadRequest\x12\x1f\n" +
 	"\vconfig_json\x18\x01 \x01(\tR\n" +
 	"configJson\x12\x1f\n" +
@@ -673,14 +914,16 @@ const file_connector_proto_rawDesc = "" +
 	"streamName\x12!\n" +
 	"\fcursor_field\x18\x03 \x01(\tR\vcursorField\x12!\n" +
 	"\fcursor_value\x18\x04 \x01(\tR\vcursorValue\x12\x14\n" +
-	"\x05limit\x18\x05 \x01(\x03R\x05limit\"\xa5\x01\n" +
+	"\x05limit\x18\x05 \x01(\x03R\x05limit\"\xc6\x01\n" +
 	"\x0eRecordEnvelope\x12\x16\n" +
 	"\x06stream\x18\x01 \x01(\tR\x06stream\x12'\n" +
 	"\x0fsequence_number\x18\x02 \x01(\x03R\x0esequenceNumber\x12\x1d\n" +
 	"\n" +
 	"emitted_at\x18\x03 \x01(\tR\temittedAt\x12\x1b\n" +
 	"\tdata_json\x18\x04 \x01(\fR\bdataJson\x12\x16\n" +
-	"\x06cursor\x18\x05 \x01(\tR\x06cursor\"y\n" +
+	"\x06cursor\x18\x05 \x01(\tR\x06cursor\x12\x1f\n" +
+	"\vrecord_type\x18\x06 \x01(\tR\n" +
+	"recordType\"y\n" +
 	"\rWriteResponse\x12'\n" +
 	"\x0frecords_written\x18\x01 \x01(\x03R\x0erecordsWritten\x12%\n" +
 	"\x0erecords_failed\x18\x02 \x01(\x03R\rrecordsFailed\x12\x18\n" +
@@ -709,7 +952,7 @@ func file_connector_proto_rawDescGZIP() []byte {
 }
 
 var file_connector_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_connector_proto_goTypes = []any{
 	(CheckStatus)(0),         // 0: kraal.v1.CheckStatus
 	(*SpecRequest)(nil),      // 1: kraal.v1.SpecRequest
@@ -717,30 +960,35 @@ var file_connector_proto_goTypes = []any{
 	(*CheckRequest)(nil),     // 3: kraal.v1.CheckRequest
 	(*CheckResponse)(nil),    // 4: kraal.v1.CheckResponse
 	(*DiscoverRequest)(nil),  // 5: kraal.v1.DiscoverRequest
-	(*StreamSchema)(nil),     // 6: kraal.v1.StreamSchema
-	(*DiscoverResponse)(nil), // 7: kraal.v1.DiscoverResponse
-	(*ReadRequest)(nil),      // 8: kraal.v1.ReadRequest
-	(*RecordEnvelope)(nil),   // 9: kraal.v1.RecordEnvelope
-	(*WriteResponse)(nil),    // 10: kraal.v1.WriteResponse
+	(*RelationEdge)(nil),     // 6: kraal.v1.RelationEdge
+	(*FieldMetadata)(nil),    // 7: kraal.v1.FieldMetadata
+	(*StreamSchema)(nil),     // 8: kraal.v1.StreamSchema
+	(*DiscoverResponse)(nil), // 9: kraal.v1.DiscoverResponse
+	(*ReadRequest)(nil),      // 10: kraal.v1.ReadRequest
+	(*RecordEnvelope)(nil),   // 11: kraal.v1.RecordEnvelope
+	(*WriteResponse)(nil),    // 12: kraal.v1.WriteResponse
 }
 var file_connector_proto_depIdxs = []int32{
 	0,  // 0: kraal.v1.CheckResponse.status:type_name -> kraal.v1.CheckStatus
-	6,  // 1: kraal.v1.DiscoverResponse.streams:type_name -> kraal.v1.StreamSchema
-	1,  // 2: kraal.v1.ConnectorService.Spec:input_type -> kraal.v1.SpecRequest
-	3,  // 3: kraal.v1.ConnectorService.Check:input_type -> kraal.v1.CheckRequest
-	5,  // 4: kraal.v1.ConnectorService.Discover:input_type -> kraal.v1.DiscoverRequest
-	8,  // 5: kraal.v1.ConnectorService.Read:input_type -> kraal.v1.ReadRequest
-	9,  // 6: kraal.v1.ConnectorService.Write:input_type -> kraal.v1.RecordEnvelope
-	2,  // 7: kraal.v1.ConnectorService.Spec:output_type -> kraal.v1.SpecResponse
-	4,  // 8: kraal.v1.ConnectorService.Check:output_type -> kraal.v1.CheckResponse
-	7,  // 9: kraal.v1.ConnectorService.Discover:output_type -> kraal.v1.DiscoverResponse
-	9,  // 10: kraal.v1.ConnectorService.Read:output_type -> kraal.v1.RecordEnvelope
-	10, // 11: kraal.v1.ConnectorService.Write:output_type -> kraal.v1.WriteResponse
-	7,  // [7:12] is the sub-list for method output_type
-	2,  // [2:7] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	7,  // 1: kraal.v1.StreamSchema.fields:type_name -> kraal.v1.FieldMetadata
+	6,  // 2: kraal.v1.StreamSchema.relations:type_name -> kraal.v1.RelationEdge
+	8,  // 3: kraal.v1.DiscoverResponse.streams:type_name -> kraal.v1.StreamSchema
+	6,  // 4: kraal.v1.DiscoverResponse.relations:type_name -> kraal.v1.RelationEdge
+	1,  // 5: kraal.v1.ConnectorService.Spec:input_type -> kraal.v1.SpecRequest
+	3,  // 6: kraal.v1.ConnectorService.Check:input_type -> kraal.v1.CheckRequest
+	5,  // 7: kraal.v1.ConnectorService.Discover:input_type -> kraal.v1.DiscoverRequest
+	10, // 8: kraal.v1.ConnectorService.Read:input_type -> kraal.v1.ReadRequest
+	11, // 9: kraal.v1.ConnectorService.Write:input_type -> kraal.v1.RecordEnvelope
+	2,  // 10: kraal.v1.ConnectorService.Spec:output_type -> kraal.v1.SpecResponse
+	4,  // 11: kraal.v1.ConnectorService.Check:output_type -> kraal.v1.CheckResponse
+	9,  // 12: kraal.v1.ConnectorService.Discover:output_type -> kraal.v1.DiscoverResponse
+	11, // 13: kraal.v1.ConnectorService.Read:output_type -> kraal.v1.RecordEnvelope
+	12, // 14: kraal.v1.ConnectorService.Write:output_type -> kraal.v1.WriteResponse
+	10, // [10:15] is the sub-list for method output_type
+	5,  // [5:10] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_connector_proto_init() }
@@ -754,7 +1002,7 @@ func file_connector_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_connector_proto_rawDesc), len(file_connector_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
