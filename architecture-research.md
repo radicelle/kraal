@@ -51,18 +51,28 @@ graph TD
 
 ---
 
-## 3. Connector Architectural Patterns
+## 3. Retained Architectural Options (1 & 2)
 
-| Pattern | Description | Desktop Fit | Cloud Fit | Version Decoupling |
-| :--- | :--- | :--- | :--- | :--- |
-| **A. Inverted Out-of-Process (gRPC / Sidecar)** | Host runs storage/DB; connectors are independent processes/containers communicating over gRPC/Protobuf. | High (local socket/loopback) | Excellent (containers/pods) | **Very High** (Protobuf forward/backward compatibility) |
-| **B. WASM Component Model (Extism / Wasmtime)** | Connectors are sandboxed WebAssembly bytecode files executed inside the Host process. | Outstanding (single binary, tiny RAM) | High (WASM runtimes in containers) | **Maximum** (Hot-reload, no container needed per connector) |
-| **C. Standard Stream Pipes (Singer / Unix Pipe)** | Connectors are CLI executables exchanging newline-delimited JSON or Arrow records via `stdin`/`stdout`. | High (subprocesses) | High (batch/job containers) | **High** (Schema-validated JSON streams) |
-| **D. Dynamic In-Process Modules (Plugins)** | Host dynamically loads shared libraries (`.so`/`.dll` or JVM ClassLoaders). | Medium | Low | **Low** (ABI breakage, memory leaks, binary coupling) |
+| Option | Architecture | Desktop Fit | Cloud Fit | Version Decoupling | Primary Technology |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Option 1 (Selected)** | **Inverted Out-of-Process (gRPC / Sidecar Service)** | High (Host spawns binary over local socket / loopback) | Outstanding (independent container per connector) | **Maximum** (Protobuf forward/backward compatibility) | **Go** |
+| **Option 2 (Alternative)** | **WASM Component Model (Extism / Wasmtime)** | Outstanding (single host process, tiny RAM) | High (WASM runtimes in containers) | **Maximum** (sandboxed guest ABI, zero container overhead) | **Rust / WASM** |
 
-### Recommended Pattern: Pattern A (gRPC Sidecar/Service) or Pattern B (WASM)
-* **Pattern A (gRPC Contract):** Best for full language freedom and micro-containers. In Cloud, each connector runs in its own Docker container communicating via HTTP/2 or gRPC. In Desktop, the Host spawns connector binaries as local child processes over IPC/Domain Sockets or loopback TCP.
-* **Pattern B (WASM Plugins):** Connectors compile to `.wasm`. In Desktop, all 50 connectors can live as tiny `.wasm` files in a folder, loaded on-demand in milliseconds inside a single host process. In Cloud, they can either run in a shared WASM runner or wrapped in minimal scratch containers.
+### Deep Dive: Option 1 — Inverted Out-of-Process (gRPC Sidecar / Service)
+* **Design:**
+  * Host and connectors are separate processes.
+  * In **Cloud Mode**, each connector is packaged as a tiny, isolated container (Go static binary, ~15MB) exposing a standard gRPC service.
+  * In **Desktop Mode**, the Host spawns the connector executable as a local subprocess, communicating over a local loopback port (`127.0.0.1:<port>`) or named pipes / Unix domain sockets.
+* **Benefits:**
+  * **True Isolation:** If a connector panics, runs out of memory, or hangs, the Host and other connectors remain unaffected.
+  * **Independent Scaling:** Cloud deployment allows each connector container to scale, sleep, or autoscale based on usage.
+  * **No "50x Version Bump" Overhead:** The connector only implements the invariant protocol contract (`Spec`, `Check`, `Discover`, `Read`, `Write`). The Host owns the internal storage engine, database migrations, and business data models.
+
+### Deep Dive: Option 2 — WASM Component Model (Extism / Wasmtime)
+* **Design:**
+  * Connectors are compiled to portable WebAssembly (`.wasm`) modules.
+  * In **Desktop Mode**, the Host loads `.wasm` files directly into its memory space via an embedded runtime (e.g. Wasmtime), eliminating multi-process management while retaining sandboxing.
+  * In **Cloud Mode**, connectors can run in lightweight WASM containers or edge workers.
 
 ---
 
@@ -70,47 +80,31 @@ graph TD
 
 To ensure connectors never break when the core library or data model updates:
 
-1. **Protocol Buffers / Schema Contracts with Additive Changes:**
-   * Define the connector-to-host interface via Protobuf or JSON Schema.
-   * New database fields or features are strictly optional/additive.
-   * Connectors continue running on v1 contract while Host is at v2.
+1. **Additive Protocol Buffers / Schema Contracts:**
+   * Define the connector-to-host interface via Protobuf contracts (`kraal.v1`).
+   * Fields are additive and optional.
+   * Connectors continue running on v1 contract while Host evolves to v2.
 2. **Capability-Based Host Services (Inversion of Control):**
-   * Instead of embedding DB drivers in connectors, the Host exposes capabilities to connectors (e.g., `SaveRecord`, `GetCursor`, `EmitEvent`).
-   * Connectors never know whether the backing store is PostgreSQL, SQLite, or S3.
-3. **Data Model Translation Layer:**
-   * Connectors output raw or semi-normalized key-value envelopes (`id`, `timestamp`, `entity_type`, `payload_json`, `metadata`).
-   * The Host engine runs transformation/ingestion pipelines to map envelopes to internal relational or document models.
+   * Instead of embedding internal DB drivers into connectors, the Host exposes capabilities to connectors.
+   * Connectors only connect to the *external* datasource they adapt (e.g. external PostgreSQL, Salesforce, Stripe), emitting generic record envelopes.
+3. **Envelope Data Model:**
+   * Connectors output generic data envelopes: `Stream`, `Schema`, `Record` (with JSON/bytes payload, cursor metadata, timestamp).
+   * The Host engine performs data model translation, validation, and storage into internal databases.
 
 ---
 
-## 5. Technology Stack Evaluation (Challenging Ktor Native)
+## 5. Technology Selection: Go for Option 1
 
-### Critique of Kotlin / Ktor Native
-
-| Aspect | Kotlin / Native Assessment |
-| :--- | :--- |
-| **Startup Time** | **Good** (< 50ms native binary startup). |
-| **Container Footprint** | **Fair** (20–40 MB binary, minimal base image). |
-| **Ecosystem & Connector Drivers** | **Critical Weakness:** Kotlin Native lacks direct access to the rich JVM ecosystem. Standard database drivers (JDBC, R2DBC), proprietary enterprise SDKs (Salesforce, SAP, AWS, GCP, Azure), message brokers, and niche protocol libraries are largely JVM-only and not available for Kotlin/Native. Developing custom C-interop bindings for 50 connectors is prohibitive. |
-| **Build & CI Performance** | **Severe Bottleneck:** Kotlin/Native uses LLVM. Linking a single binary is resource-intensive and slow (often 1–3 minutes). Compiling 50 separate connector binaries in CI will cause massive pipeline congestion. |
-| **Desktop Cross-Platform** | Multi-target compilation (macOS, Windows mingwX64, Linux x64) requires distinct platform runners or complex cross-toolchains. |
+Go provides optimal characteristics for the Option 1 architecture:
+* **Cold Start & Speed:** Sub-10ms process start, making Desktop subprocess spawning instantaneous.
+* **Resource Footprint:** 10–25MB RAM per connector process/container.
+* **Single Static Executable:** No JVM, no shared library dependencies, perfect for minimal Docker images (`scratch` / `alpine`).
+* **Rich Database Ecosystem:** Production-hardened PostgreSQL driver (`pgx`), MySQL, Snowflake, and cloud clients natively maintained.
+* **Instant Compilation:** Builds in seconds, enabling fast CI/CD pipelines across 50+ connector packages.
 
 ---
 
-### Comparative Technology Matrix
-
-| Technology | Strengths | Drawbacks | Best Role |
-| :--- | :--- | :--- | :--- |
-| **Go** | • Instant compilation (seconds, not minutes)<br>• Immense ecosystem of API & DB clients<br>• Zero-dependency single static binaries (`scratch` Docker images ~15MB)<br>• Low RAM (10–30MB), cold start < 10ms<br>• Trivial cross-compilation (`GOOS`/`GOARCH`) | • Lack of runtime dynamic loading (must use IPC/gRPC or WASM for plugins) | **Top Choice for Cloud Containers & Connector Microservices** |
-| **Rust + WASM (Extism/Wasmtime)** | • Ultimate memory safety & zero GC pauses<br>• Compile connectors to portable `.wasm` modules<br>• True Desktop & Cloud parity (run in-process or via container)<br>• Instant execution | • Steeper learning curve for community connector authors | **Top Choice for WASM Plugin Architecture** |
-| **Kotlin JVM + GraalVM Native Image** | • Full access to complete JVM connector ecosystem (JDBC, Kafka, etc.)<br>• GraalVM Native Image gives < 20ms startup & native Docker images<br>• Same Kotlin language syntax | • GraalVM reflection configuration overhead<br>• High build-time memory usage in CI | **Top Choice if staying strictly within Kotlin** |
-| **Node.js / Bun / TypeScript** | • Fastest authoring speed for REST/GraphQL connectors<br>• Vast npm ecosystem<br>• Bun provides rapid startup (< 15ms) and single-executable compilation | • Higher memory usage under heavy concurrent load | **Alternative for I/O-heavy API connectors** |
-
----
-
-## 6. Recommended Strategy & Roadmap
-
-### Recommended Architecture: Host-Connector Decoupled Pipeline
+## 6. Architecture Overview: Host-Connector Decoupled Pipeline
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -120,27 +114,17 @@ To ensure connectors never break when the core library or data model updates:
 |  Single Desktop App / Host Process     |  Kubernetes / Container Orchestrator     |
 |                                        |                                          |
 |  +----------------------------------+  |  +----------------+  +----------------+  |
-|  | Host Runtime Engine (SQLite/Core)|  |  | Connector 1    |  | Connector 2    |  |
-|  +-----------------+----------------+  |  | Container (Go) |  | Container (Go) |  |
-|                    | IPC/Socket        |  +-------+--------+  +-------+--------+  |
+|  | Host Runtime Engine (SQLite/Core)|  |  | Postgres       |  | API            |  |
+|  +-----------------+----------------+  |  | Connector (Go) |  | Connector (Go) |  |
+|                    | Local Loopback    |  +-------+--------+  +-------+--------+  |
 |  +-----------------+----------------+  |          \                  /            |
-|  | Connector Processes or WASM Mods |  |           \   gRPC / HTTP  /             |
-|  | (Connector 1, Connector 2, ...)  |  |            v              v              |
+|  | Connector Local Processes        |  |           \   gRPC / TCP   /             |
+|  | (Postgres, API, etc.)            |  |            v              v              |
 |  +----------------------------------+  |  +------------------------------------+  |
-|                                        |  | Ingestion & Storage Service (Host) |  |
+|                                        |  | Host Ingestion / Storage Service   |  |
 |                                        |  +-----------------+------------------+  |
-|                                        |                    | SQL / Warehouse     |
+|                                        |                    | Storage Sink        |
 |                                        |                    v                     |
-|                                        |             [( PostgreSQL )]             |
+|                                        |            [( Target Store )]            |
 +----------------------------------------+------------------------------------------+
 ```
-
-### Actionable Next Steps
-1. **Define the Canonical Connector Contract (Phase 1):**
-   * Specify Protobuf / gRPC schemas for connectors: `Discovery` (metadata), `ReadStream` (records emission), `WriteStream` (ingestion), `HealthCheck`.
-2. **Decouple Database Logic from Connector Modules (Phase 1):**
-   * Keep database drivers and data models solely inside the core Host application.
-3. **Prototype Host & Connector in Go or Kotlin JVM (Phase 2):**
-   * Test Go or Kotlin (GraalVM / standard JVM) for connector development to compare developer velocity, build times, and image sizes.
-4. **Evaluate WebAssembly (Extism) for Desktop Plugin Density (Phase 3):**
-   * Evaluate whether packaging connectors as `.wasm` files achieves the optimal balance of isolation, portability, and zero-overhead local desktop execution.

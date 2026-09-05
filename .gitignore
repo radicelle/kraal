@@ -1,6 +1,14 @@
-.gradle/
-build/
+# Binaries and build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# IDE & OS
 .idea/
+.vscode/
 *.iml
 *.iws
 *.ipr

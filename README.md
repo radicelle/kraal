@@ -1,91 +1,123 @@
-# Ktor Native Server
+# Kraal: Modular Connector Architecture (Go)
 
-A minimalist, high-performance [Ktor](https://ktor.io/) HTTP server compiled directly to **native machine code via Kotlin/Native (LLVM)** without GraalVM or JVM overhead, packaged into a minimal **Docker** container.
-
----
-
-## 🚀 Features
-
-- **Kotlin/Native (LLVM Backend)**: Compiles directly to native binaries (`linuxX64` / `mingwX64`).
-- **No GraalVM / Reflection Configs**: Pure Kotlin Multiplatform AOT compilation without needing `reflect-config.json` or reachability metadata.
-- **Ktor 3.x with CIO**: High-throughput asynchronous Coroutine I/O.
-- **Ultra-fast Startup**: Starts in **~3 ms**.
-- **Multi-stage Dockerfile**: Builds the Linux binary with Kotlin/Native and packages it into `debian:bookworm-slim` (~35 MB compressed).
+A high-performance, modular connector platform based on the **Inverted Out-of-Process (gRPC / Sidecar)** architecture. Kraal enables dozens of heterogeneous data connectors (Postgres, APIs, queues) to run identically in both **Desktop Mode** (local subprocess with zero container overhead) and **Cloud Mode** (independent micro-containers scaling freely), while solving the shared library dependency hell.
 
 ---
 
-## 📂 Project Structure
+## 🏛️ Architecture Highlights
+
+### The "Smart Host, Thin Connector" Principle
+* **No Database/ORM Coupling:** Connectors do **not** import the Host's internal database drivers or internal data models.
+* **Invariant SDK Contract:** The shared `pkg/sdk` and `pkg/protocol` packages define only the standard protocol (`Spec`, `Check`, `Discover`, `Read`, `Write`) and record envelopes. Updating host storage engines or adding new connector features never triggers breaking version bumps across 50+ connectors.
+* **Dual Execution Mode:**
+  * **Desktop Mode:** The Host spawns the connector as a local child process on an ephemeral loopback port (`127.0.0.1:0`), discovering the assigned port via a readiness handshake (`[KRAAL_READY] address=...`). Instant startup (< 10ms), tiny RAM (~15MB), zero Docker required.
+  * **Cloud Mode:** The connector runs inside its own lightweight Docker container (`alpine` or `scratch`, < 15MB) exposing gRPC on port `50051`. Each connector can scale, sleep, or autoscale independently.
+
+```
++-----------------------------------------------------------------------------------+
+|                                  DEPLOYMENT MODES                                 |
++----------------------------------------+------------------------------------------+
+|              DESKTOP MODE              |                CLOUD MODE                |
+|  Single Desktop App / Host Process     |  Kubernetes / Container Orchestrator     |
+|                                        |                                          |
+|  +----------------------------------+  |  +----------------+  +----------------+  |
+|  | Host Runtime Engine (Ingestion)  |  |  | Postgres       |  | API            |  |
+|  +-----------------+----------------+  |  | Connector (Go) |  | Connector (Go) |  |
+|                    | Local Loopback    |  +-------+--------+  +-------+--------+  |
+|  +-----------------+----------------+  |          \                  /            |
+|  | Connector Local Processes        |  |           \   gRPC / TCP   /             |
+|  | (Postgres, API, etc.)            |  |            v              v              |
+|  +----------------------------------+  |  +------------------------------------+  |
+|                                        |  | Host Ingestion / Storage Service   |  |
+|                                        |  +-----------------+------------------+  |
+|                                        |                    | Storage Sink        |
+|                                        |                    v                     |
+|                                        |            [( Target Store )]            |
++----------------------------------------+------------------------------------------+
+```
+
+---
+
+## 📂 Repository Structure
 
 ```text
-├── Dockerfile                  # Multi-stage Docker build for Kotlin/Native
-├── build.gradle.kts            # Kotlin Multiplatform build configuration
-├── settings.gradle.kts         # Gradle settings
-├── gradle.properties           # Gradle JVM settings
-├── gradlew / gradlew.bat       # Gradle wrapper scripts
-├── src
-│   ├── commonMain
-│   │   └── kotlin
-│   │       └── com/example/
-│   │           └── Application.kt   # Ktor server entrypoint & routes
-│   └── commonTest
-│       └── kotlin
-│           └── com/example/
-│               └── ApplicationTest.kt # Integration tests
+├── proto/
+│   └── kraal/v1/
+│       └── connector.proto      # Invariant gRPC protocol definition
+├── pkg/
+│   ├── protocol/v1/             # Generated Protobuf & gRPC Go stubs
+│   └── sdk/                     # Shared connector toolkit: Server, Client, Subprocess Launcher
+├── connectors/
+│   └── postgres/                # PostgreSQL Source & Sink connector (pure Go pgx)
+│       ├── config.go            # Connection config & validation
+│       ├── connector.go         # Implementation of sdk.Connector
+│       ├── connector_test.go    # Unit tests
+│       └── Dockerfile           # Minimal container build (< 15MB)
+├── cmd/
+│   ├── connector-postgres/      # Main entrypoint for standalone Postgres connector binary
+│   │   └── main.go
+│   └── kraal-host/              # Host runtime engine (Desktop & Cloud runner)
+│       └── main.go
+├── architecture-research.md     # Architectural options research document
+├── Dockerfile                   # Standalone connector container image
 └── README.md
 ```
 
 ---
 
-## 🛠️ Endpoints
+## 🚀 Quickstart & Usage
 
-| Method | Path      | Description          | Response                              |
-| ------ | --------- | -------------------- | ------------------------------------- |
-| `GET`  | `/`       | Main greeting route  | `Hello from Ktor Native!`             |
-| `GET`  | `/health` | Healthcheck endpoint | `OK`                                  |
+### 1. Build Binaries Locally
 
----
-
-## 🐳 Building and Running with Docker (Recommended)
-
-### 1. Build the Docker Image
-
-```bash
-docker build -t kraal-server:latest .
+```powershell
+go build -o bin/connector-postgres.exe ./cmd/connector-postgres
+go build -o bin/kraal-host.exe ./cmd/kraal-host
 ```
 
-### 2. Run the Container
+### 2. Desktop Mode (Subprocess Execution)
 
-```bash
-docker run --rm -p 8080:8080 kraal-server:latest
-```
+In Desktop mode, `kraal-host` spawns the connector executable locally on an ephemeral port without any manual network configuration:
 
-### 3. Test the Endpoint
+```powershell
+# Query connector specification
+.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-postgres.exe -action=spec
 
-```bash
-curl http://localhost:8080/
-# Output: Hello from Ktor Native!
+# Run connection check against a database
+.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-postgres.exe -action=check -config='{\"host\":\"localhost\",\"port\":5432,\"database\":\"mydb\",\"user\":\"postgres\",\"password\":\"secret\"}'
+
+# Run schema discovery
+.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-postgres.exe -action=discover -config='{\"host\":\"localhost\",\"port\":5432,\"database\":\"mydb\",\"user\":\"postgres\",\"password\":\"secret\"}'
+
+# Stream records into host data layer
+.\bin\kraal-host.exe -mode=desktop -binary=.\bin\connector-postgres.exe -action=sync -stream="public.users" -config='{\"host\":\"localhost\",\"port\":5432,\"database\":\"mydb\",\"user\":\"postgres\",\"password\":\"secret\"}'
 ```
 
 ---
 
-## 💻 Local Development
+### 3. Cloud Mode (Independent Docker Container)
 
-### Run Tests
+#### Build the Connector Container
 
 ```bash
-# Windows (runs mingwX64 test)
-.\gradlew.bat mingwX64Test
-
-# Linux (runs linuxX64 test)
-./gradlew linuxX64Test
+docker build -t kraal-connector-postgres:latest .
 ```
 
-### Compile Native Executable Locally
+#### Run the Container
 
 ```bash
-# Windows: outputs build/bin/mingwX64/releaseExecutable/kraal-server.exe
-.\gradlew.bat linkReleaseExecutableMingwX64
+docker run -d --name pg-connector -p 50051:50051 kraal-connector-postgres:latest
+```
 
-# Linux: outputs build/bin/linuxX64/releaseExecutable/kraal-server.kexe
-./gradlew linkReleaseExecutableLinuxX64
+#### Connect via Host in Cloud Mode
+
+```powershell
+.\bin\kraal-host.exe -mode=cloud -remote=127.0.0.1:50051 -action=spec
+```
+
+---
+
+## 🧪 Running Tests
+
+```powershell
+go test ./...
 ```

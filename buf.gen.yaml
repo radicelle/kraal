@@ -1,0 +1,10 @@
+version: v2
+plugins:
+  - local: ["C:/Users/manua/go/bin/protoc-gen-go.exe"]
+    out: pkg/protocol/v1
+    opt: paths=source_relative
+  - local: ["C:/Users/manua/go/bin/protoc-gen-go-grpc.exe"]
+    out: pkg/protocol/v1
+    opt: paths=source_relative
+inputs:
+  - directory: proto/kraal/v1

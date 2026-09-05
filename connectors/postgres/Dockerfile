@@ -28,10 +28,3 @@ EXPOSE 50051
 
 ENTRYPOINT ["/app/connector-postgres"]
 CMD ["--listen=0.0.0.0:50051"]
-
-# Copy the native executable from the build stage
-COPY --from=builder --chown=ktor:ktor /workspace/build/bin/linuxX64/releaseExecutable/kraal-server.kexe /app/kraal-server
-
-EXPOSE 8080
-
-ENTRYPOINT ["/app/kraal-server"]

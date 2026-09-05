@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package kraal.v1;
+
+option go_package = "github.com/radicelle/kraal/pkg/protocol/v1;protocolv1";
+
+// ConnectorService defines the invariant contract for all Kraal connectors.
+service ConnectorService {
+  // Spec returns connector metadata and required configuration schema.
+  rpc Spec(SpecRequest) returns (SpecResponse);
+
+  // Check verifies connectivity to the external target with provided configuration.
+  rpc Check(CheckRequest) returns (CheckResponse);
+
+  // Discover inspects the external target and returns available streams and schemas.
+  rpc Discover(DiscoverRequest) returns (DiscoverResponse);
+
+  // Read extracts records from the external target and streams them to the caller.
+  rpc Read(ReadRequest) returns (stream RecordEnvelope);
+
+  // Write ingests records into the external target when operating as a sink.
+  rpc Write(stream RecordEnvelope) returns (WriteResponse);
+}
+
+message SpecRequest {}
+
+message SpecResponse {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  string config_schema_json = 4; // JSON Schema describing expected config fields
+}
+
+message CheckRequest {
+  string config_json = 1;
+}
+
+enum CheckStatus {
+  CHECK_STATUS_UNSPECIFIED = 0;
+  CHECK_STATUS_SUCCESS = 1;
+  CHECK_STATUS_FAILED = 2;
+}
+
+message CheckResponse {
+  CheckStatus status = 1;
+  string message = 2;
+}
+
+message DiscoverRequest {
+  string config_json = 1;
+}
+
+message StreamSchema {
+  string name = 1;                          // Table or stream name (e.g. "users")
+  repeated string primary_keys = 2;         // Primary key field names
+  string json_schema = 3;                   // Column definitions & JSON types
+  repeated string supported_sync_modes = 4; // e.g. ["FULL_REFRESH", "INCREMENTAL"]
+}
+
+message DiscoverResponse {
+  repeated StreamSchema streams = 1;
+}
+
+message ReadRequest {
+  string config_json = 1;
+  string stream_name = 2;
+  string cursor_field = 3;
+  string cursor_value = 4; // Starting cursor for incremental sync
+  int64 limit = 5;         // Optional row limit (0 = no limit)
+}
+
+message RecordEnvelope {
+  string stream = 1;
+  int64 sequence_number = 2;
+  string emitted_at = 3; // RFC3339 timestamp
+  bytes data_json = 4;   // Record payload encoded as JSON
+  string cursor = 5;     // Cursor value for state tracking
+}
+
+message WriteResponse {
+  int64 records_written = 1;
+  int64 records_failed = 2;
+  string message = 3;
+}
